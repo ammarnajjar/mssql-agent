@@ -82,9 +82,17 @@ Notes
 Secure secrets and Docker
 ------------------------
 
-For security, avoid committing real passwords to the repository. Options:
+For security, avoid committing real passwords to the repository. Preferred options:
 
-- Local development with a secrets file (recommended for compose):
+- Local development using a `.env` file (recommended): copy the example and update values.
+
+```bash
+cp .env.example .env
+# edit .env and set DB_HOST/DB_USER/DB_PASS etc.
+docker-compose up --build --abort-on-container-exit
+```
+
+- Alternatively, you can still use a secrets file for compose if you prefer to keep the password out of environment files:
 
 ```bash
 # create a secrets directory and store your DB password in secrets/db_pass (file contains only the password)
@@ -94,7 +102,7 @@ chmod 600 ./secrets/db_pass
 docker-compose up --build --abort-on-container-exit
 ```
 
-- Export DB_PASS in your shell before running loader scripts:
+- Export `DB_PASS` in your shell before running loader scripts:
 
 ```bash
 export DB_PASS="my_db_password_here"
@@ -103,4 +111,4 @@ export DB_PASS="my_db_password_here"
 
 - For production, prefer Docker secrets or a secrets manager and map the secret into `/run/secrets/db_pass` for the service.
 
-The project already supports reading a Docker secret from `/run/secrets/db_pass` (used by `agent.utils`) and `./secrets/db_pass` for the loader script.
+The project supports reading DB credentials from `.env`, from a local `./secrets/db_pass` file, or from `/run/secrets/db_pass` (Docker secrets). `agent.utils` will prefer environment variables / `.env` when available.
