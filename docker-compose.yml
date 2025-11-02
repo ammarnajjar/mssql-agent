@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  agent:
+    build: .
+    environment:
+      # Use host.docker.internal to connect to a MSSQL instance running on the host.
+      # Avoid embedding passwords here. Set DB_PASS in your environment or .env instead.
+      - DB_DRIVER=FreeTDS
+      - DB_HOST=host.docker.internal
+      - DB_PORT=1433
+      - DB_NAME=Chinook
+      - DB_USER=sa
+      # Ensure we don't pick up a full CONNECTION_STRING from a copied .env file in the image
+      # (this avoids using a driver that's not installed inside the container).
+      - CONNECTION_STRING=
+      # OUTPUT_DIR is where the agent will write JSON files; mounted to host ./out
+      - OUTPUT_DIR=/output
+    # Load DB_PASS and other variables from .env for local development
+    env_file:
+      - .env
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./out:/output
+
