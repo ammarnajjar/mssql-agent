@@ -3,6 +3,9 @@
 This module keeps pyodbc import lazy so tests can run without the dependency or driver.
 """
 from typing import List, Dict, Optional
+from pathlib import Path
+import os
+from datetime import datetime
 import re
 
 
@@ -34,8 +37,41 @@ def get_table_schema(connection_string: str, table_name: str) -> List[Dict[str, 
 
     # Connect using the connection string directly.
     try:
+        # Optional debug info when DEBUG_DB env var is set (only in diagnostics)
+        if os.environ.get("DEBUG_DB"):
+            try:
+                # Print to stdout for quick debugging
+                print("DEBUG_DB: connection_string=", connection_string)
+                print("DEBUG_DB: pyodbc.drivers()=", pyodbc.drivers())
+                # Also append a timestamped log to /output/agent-db-debug.log when available
+                out_dir = os.environ.get("OUTPUT_DIR", "/output")
+                try:
+                    Path(out_dir).mkdir(parents=True, exist_ok=True)
+                    log_path = Path(out_dir) / "agent-db-debug.log"
+                    with log_path.open("a", encoding="utf-8") as fh:
+                        fh.write("---\n")
+                        fh.write(datetime.utcnow().isoformat() + "Z\n")
+                        fh.write("connection_string=" + (connection_string or "") + "\n")
+                        fh.write("drivers=" + str(pyodbc.drivers()) + "\n")
+                except Exception:
+                    pass
+            except Exception:
+                pass
         cnxn = pyodbc.connect(connection_string, autocommit=True)
     except Exception as e:
+        # If DEBUG_DB set try to write the full traceback to the log file for post-mortem
+        if os.environ.get("DEBUG_DB"):
+            try:
+                import traceback as _tb
+                out_dir = os.environ.get("OUTPUT_DIR", "/output")
+                Path(out_dir).mkdir(parents=True, exist_ok=True)
+                log_path = Path(out_dir) / "agent-db-debug.log"
+                with log_path.open("a", encoding="utf-8") as fh:
+                    fh.write("EXCEPTION:\n")
+                    fh.write(_tb.format_exc())
+                    fh.write("\n---\n")
+            except Exception:
+                pass
         raise DBClientError(f"Failed to connect: {e}")
 
     # Normalize table into schema and table
@@ -80,6 +116,19 @@ def get_table_primary_key(connection_string: str, table_name: str) -> List[str]:
     try:
         cnxn = pyodbc.connect(connection_string, autocommit=True)
     except Exception as e:
+        # write debug if requested
+        if os.environ.get("DEBUG_DB"):
+            try:
+                out_dir = os.environ.get("OUTPUT_DIR", "/output")
+                Path(out_dir).mkdir(parents=True, exist_ok=True)
+                log_path = Path(out_dir) / "agent-db-debug.log"
+                import traceback as _tb
+                with log_path.open("a", encoding="utf-8") as fh:
+                    fh.write("EXCEPTION get_table_primary_key:\n")
+                    fh.write(_tb.format_exc())
+                    fh.write("\n---\n")
+            except Exception:
+                pass
         raise DBClientError(f"Failed to connect: {e}")
 
     if "." in table_name:
@@ -106,3 +155,48 @@ def get_table_primary_key(connection_string: str, table_name: str) -> List[str]:
     cursor.close()
     cnxn.close()
     return pk_cols
+
+
+def execute_query(connection_string: str, sql: str):
+    """Execute a SQL query and return rows as list of tuples.
+
+    This is intentionally minimal: callers should format/serialize results.
+    """
+    try:
+        import pyodbc
+    except Exception as e:
+        raise DBClientError("pyodbc is required to execute queries: %s" % e)
+
+    try:
+        cnxn = pyodbc.connect(connection_string, autocommit=True)
+    except Exception as e:
+        if os.environ.get("DEBUG_DB"):
+            try:
+                out_dir = os.environ.get("OUTPUT_DIR", "/output")
+                Path(out_dir).mkdir(parents=True, exist_ok=True)
+                log_path = Path(out_dir) / "agent-db-debug.log"
+                import traceback as _tb
+                with log_path.open("a", encoding="utf-8") as fh:
+                    fh.write("EXCEPTION execute_query:\n")
+                    fh.write(_tb.format_exc())
+                    fh.write("\n---\n")
+            except Exception:
+                pass
+        raise DBClientError(f"Failed to connect: {e}")
+
+    cursor = cnxn.cursor()
+    try:
+        cursor.execute(sql)
+        cols = [col[0] for col in cursor.description] if cursor.description else []
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()] if cols else [tuple(row) for row in cursor.fetchall()]
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            cnxn.close()
+        except Exception:
+            pass
+
+    return rows

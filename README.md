@@ -112,3 +112,20 @@ export DB_PASS="my_db_password_here"
 - For production, prefer Docker secrets or a secrets manager and map the secret into `/run/secrets/db_pass` for the service.
 
 The project supports reading DB credentials from `.env`, from a local `./secrets/db_pass` file, or from `/run/secrets/db_pass` (Docker secrets). `agent.utils` will prefer environment variables / `.env` when available.
+
+OpenAI / LLM integration
+------------------------
+
+This project can optionally use OpenAI to turn natural-language instructions into SQL. To enable it, set your API key in the environment:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Then run the interactive agent:
+
+```bash
+python -m agent.agent --table dbo.Track --ask "top 10 tracks by sales"
+```
+
+Safety notes: the agent will refuse to execute non-SELECT statements unless you pass `--execute`. Never commit API keys to the repository; prefer environment variables or secret managers.
